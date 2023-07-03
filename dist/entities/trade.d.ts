@@ -23,10 +23,10 @@ export declare class Trade {
     readonly executionPrice: Price;
     readonly nextMidPrice: Price;
     readonly slippage: Percent;
-    constructor(route: Route, amount: TokenAmount, tradeType: TradeType);
+    constructor(route: Route, amount: TokenAmount, tradeType: TradeType, factoryAddress: string);
     minimumAmountOut(slippageTolerance: Percent): TokenAmount;
     maximumAmountIn(slippageTolerance: Percent): TokenAmount;
-    static bestTradeExactIn(pairs: Pair[], amountIn: TokenAmount, tokenOut: Token, { maxNumResults, maxHops }?: BestTradeOptions, currentPairs?: Pair[], originalAmountIn?: TokenAmount, bestTrades?: Trade[]): Trade[];
-    static bestTradeExactOut(pairs: Pair[], tokenIn: Token, amountOut: TokenAmount, { maxNumResults, maxHops }?: BestTradeOptions, currentPairs?: Pair[], originalAmountOut?: TokenAmount, bestTrades?: Trade[]): Trade[];
+    static bestTradeExactIn(pairs: Pair[], amountIn: TokenAmount, tokenOut: Token, { maxNumResults, maxHops }: BestTradeOptions | undefined, currentPairs: Pair[] | undefined, originalAmountIn: TokenAmount | undefined, bestTrades: Trade[] | undefined, factoryAddress: string): Trade[];
+    static bestTradeExactOut(pairs: Pair[], tokenIn: Token, amountOut: TokenAmount, { maxNumResults, maxHops }: BestTradeOptions | undefined, currentPairs: Pair[] | undefined, originalAmountOut: TokenAmount | undefined, bestTrades: Trade[] | undefined, factoryAddress: string): Trade[];
 }
 export {};

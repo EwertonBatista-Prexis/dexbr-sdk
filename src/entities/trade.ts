@@ -1,7 +1,7 @@
 import { Token } from 'entities/token'
 import invariant from 'tiny-invariant'
 
-import { ONE, TradeType, ZERO } from '../constants'
+import { FACTORY_ADDRESS, ONE, TradeType, ZERO } from '../constants'
 import { sortedInsert } from '../utils'
 import { Fraction, TokenAmount } from './fractions'
 import { Percent } from './fractions/percent'
@@ -82,7 +82,7 @@ export class Trade {
   public readonly nextMidPrice: Price
   public readonly slippage: Percent
 
-  public constructor(route: Route, amount: TokenAmount, tradeType: TradeType) {
+  public constructor(route: Route, amount: TokenAmount, tradeType: TradeType, factoryAddress: string) {
     invariant(amount.token.equals(tradeType === TradeType.EXACT_INPUT ? route.input : route.output), 'TOKEN')
     const amounts: TokenAmount[] = new Array(route.path.length)
     const nextPairs: Pair[] = new Array(route.pairs.length)
@@ -90,7 +90,7 @@ export class Trade {
       amounts[0] = amount
       for (let i = 0; i < route.path.length - 1; i++) {
         const pair = route.pairs[i]
-        const [outputAmount, nextPair] = pair.getOutputAmount(amounts[i])
+        const [outputAmount, nextPair] = pair.getOutputAmount(amounts[i], factoryAddress ? factoryAddress : FACTORY_ADDRESS)
         amounts[i + 1] = outputAmount
         nextPairs[i] = nextPair
       }
@@ -98,7 +98,7 @@ export class Trade {
       amounts[amounts.length - 1] = amount
       for (let i = route.path.length - 1; i > 0; i--) {
         const pair = route.pairs[i - 1]
-        const [inputAmount, nextPair] = pair.getInputAmount(amounts[i])
+        const [inputAmount, nextPair] = pair.getInputAmount(amounts[i], factoryAddress ? factoryAddress : FACTORY_ADDRESS)
         amounts[i - 1] = inputAmount
         nextPairs[i - 1] = nextPair
       }
@@ -149,14 +149,15 @@ export class Trade {
   // note this does not consider aggregation, as routes are linear. it's possible a better route exists by splitting
   // the amount in among multiple routes.
   public static bestTradeExactIn(
-    pairs: Pair[],
+    pairs: Pair[],    
     amountIn: TokenAmount,
     tokenOut: Token,
     { maxNumResults = 3, maxHops = 3 }: BestTradeOptions = {},
     // used in recursion.
     currentPairs: Pair[] = [],
     originalAmountIn: TokenAmount = amountIn,
-    bestTrades: Trade[] = []
+    bestTrades: Trade[] = [],
+    factoryAddress: string
   ): Trade[] {
     invariant(pairs.length > 0, 'PAIRS')
     invariant(maxHops > 0, 'MAX_HOPS')
@@ -170,7 +171,7 @@ export class Trade {
 
       let amountOut: TokenAmount
       try {
-        ;[amountOut] = pair.getOutputAmount(amountIn)
+        ;[amountOut] = pair.getOutputAmount(amountIn, factoryAddress ? factoryAddress : FACTORY_ADDRESS)
       } catch (error) {
         // input too low
         if (error.isInsufficientInputAmountError) {
@@ -185,7 +186,8 @@ export class Trade {
           new Trade(
             new Route([...currentPairs, pair], originalAmountIn.token),
             originalAmountIn,
-            TradeType.EXACT_INPUT
+            TradeType.EXACT_INPUT,
+            factoryAddress
           ),
           maxNumResults,
           tradeComparator
@@ -204,7 +206,8 @@ export class Trade {
           },
           [...currentPairs, pair],
           originalAmountIn,
-          bestTrades
+          bestTrades,
+          factoryAddress
         )
       }
     }
@@ -225,7 +228,8 @@ export class Trade {
     // used in recursion.
     currentPairs: Pair[] = [],
     originalAmountOut: TokenAmount = amountOut,
-    bestTrades: Trade[] = []
+    bestTrades: Trade[] = [],
+    factoryAddress: string
   ): Trade[] {
     invariant(pairs.length > 0, 'PAIRS')
     invariant(maxHops > 0, 'MAX_HOPS')
@@ -239,7 +243,7 @@ export class Trade {
 
       let amountIn: TokenAmount
       try {
-        ;[amountIn] = pair.getInputAmount(amountOut)
+        ;[amountIn] = pair.getInputAmount(amountOut, factoryAddress)
       } catch (error) {
         // not enough liquidity in this pair
         if (error.isInsufficientReservesError) {
@@ -251,7 +255,7 @@ export class Trade {
       if (amountIn!.token.equals(tokenIn)) {
         sortedInsert(
           bestTrades,
-          new Trade(new Route([pair, ...currentPairs], tokenIn), originalAmountOut, TradeType.EXACT_OUTPUT),
+          new Trade(new Route([pair, ...currentPairs], tokenIn), originalAmountOut, TradeType.EXACT_OUTPUT, factoryAddress),
           maxNumResults,
           tradeComparator
         )
@@ -269,7 +273,8 @@ export class Trade {
           },
           [pair, ...currentPairs],
           originalAmountOut,
-          bestTrades
+          bestTrades,
+          factoryAddress
         )
       }
     }

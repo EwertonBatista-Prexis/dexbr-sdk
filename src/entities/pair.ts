@@ -29,7 +29,7 @@ export class Pair {
   public readonly liquidityToken: Token
   private readonly tokenAmounts: [TokenAmount, TokenAmount]
 
-  static getAddress(tokenA: Token, tokenB: Token): string {
+  static getAddress(tokenA: Token, tokenB: Token, factoryAddress: string): string {
     const tokens = tokenA.sortsBefore(tokenB) ? [tokenA, tokenB] : [tokenB, tokenA] // does safety checks
 
     if (CACHE?.[tokens[0].address]?.[tokens[1].address] === undefined) {
@@ -38,7 +38,7 @@ export class Pair {
         [tokens[0].address]: {
           ...CACHE?.[tokens[0].address],
           [tokens[1].address]: getCreate2Address(
-            FACTORY_ADDRESS,
+            factoryAddress ? factoryAddress : FACTORY_ADDRESS,
             keccak256(['bytes'], [pack(['address', 'address'], [tokens[0].address, tokens[1].address])]),
             INIT_CODE_HASH
           )
@@ -52,22 +52,23 @@ export class Pair {
   static async fetchData(
     tokenA: Token,
     tokenB: Token,
+    factoryAddress: string,
     provider = getDefaultProvider(getNetwork(tokenA.chainId))
   ): Promise<Pair> {
     invariant(tokenA.chainId === tokenB.chainId, 'CHAIN_ID')
-    const address = Pair.getAddress(tokenA, tokenB)
+    const address = Pair.getAddress(tokenA, tokenB, factoryAddress ? factoryAddress : FACTORY_ADDRESS)
     const [reserves0, reserves1] = await new Contract(address, IUniswapV2Pair.abi, provider).getReserves()
     const balances = tokenA.sortsBefore(tokenB) ? [reserves0, reserves1] : [reserves1, reserves0]
-    return new Pair(new TokenAmount(tokenA, balances[0]), new TokenAmount(tokenB, balances[1]))
+    return new Pair(new TokenAmount(tokenA, balances[0]), new TokenAmount(tokenB, balances[1]), factoryAddress ? factoryAddress : FACTORY_ADDRESS)
   }
 
-  constructor(tokenAmountA: TokenAmount, tokenAmountB: TokenAmount) {
+  constructor(tokenAmountA: TokenAmount, tokenAmountB: TokenAmount, factoryAddress: string) {
     const tokenAmounts = tokenAmountA.token.sortsBefore(tokenAmountB.token) // does safety checks
       ? [tokenAmountA, tokenAmountB]
       : [tokenAmountB, tokenAmountA]
     this.liquidityToken = new Token(
       tokenAmounts[0].token.chainId,
-      Pair.getAddress(tokenAmounts[0].token, tokenAmounts[1].token),
+      Pair.getAddress(tokenAmounts[0].token, tokenAmounts[1].token, factoryAddress ? factoryAddress : FACTORY_ADDRESS),
       18,
       'UNI-V2',
       'Uniswap V2'
@@ -96,7 +97,7 @@ export class Pair {
     return token.equals(this.token0) ? this.reserve0 : this.reserve1
   }
 
-  getOutputAmount(inputAmount: TokenAmount): [TokenAmount, Pair] {
+  getOutputAmount(inputAmount: TokenAmount, factoryAddress: string): [TokenAmount, Pair] {
     invariant(inputAmount.token.equals(this.token0) || inputAmount.token.equals(this.token1), 'TOKEN')
     if (JSBI.equal(this.reserve0.raw, ZERO) || JSBI.equal(this.reserve1.raw, ZERO)) {
       throw new InsufficientReservesError()
@@ -113,10 +114,10 @@ export class Pair {
     if (JSBI.equal(outputAmount.raw, ZERO)) {
       throw new InsufficientInputAmountError()
     }
-    return [outputAmount, new Pair(inputReserve.add(inputAmount), outputReserve.subtract(outputAmount))]
+    return [outputAmount, new Pair(inputReserve.add(inputAmount), outputReserve.subtract(outputAmount), factoryAddress ? factoryAddress : FACTORY_ADDRESS)]
   }
 
-  getInputAmount(outputAmount: TokenAmount): [TokenAmount, Pair] {
+  getInputAmount(outputAmount: TokenAmount, factoryAddress: string): [TokenAmount, Pair] {
     invariant(outputAmount.token.equals(this.token0) || outputAmount.token.equals(this.token1), 'TOKEN')
     if (
       JSBI.equal(this.reserve0.raw, ZERO) ||
@@ -134,7 +135,7 @@ export class Pair {
       outputAmount.token.equals(this.token0) ? this.token1 : this.token0,
       JSBI.add(JSBI.divide(numerator, denominator), ONE)
     )
-    return [inputAmount, new Pair(inputReserve.add(inputAmount), outputReserve.subtract(outputAmount))]
+    return [inputAmount, new Pair(inputReserve.add(inputAmount), outputReserve.subtract(outputAmount), factoryAddress ? factoryAddress : FACTORY_ADDRESS)]
   }
 
   getLiquidityMinted(totalSupply: TokenAmount, tokenAmountA: TokenAmount, tokenAmountB: TokenAmount): TokenAmount {
